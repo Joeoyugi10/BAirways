@@ -1,0 +1,649 @@
+---
+title: |      
+  **BRITISH AIRWAYS**                          
+  ![](British_Airways){}                       
+  **ANALYSIS OF WEB SCRAPPED BRITISH AIRLINE REVIEWS**                          
+  **-----------------------------------------------------------------------**    
+output: pdf_document
+mainfont: Times New Roman
+fontsize: 11pt
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning  = FALSE, message = FALSE, comment = NA, tidy.opts = list(width.cutoff = I(60)), tidy = TRUE)
+options(digits = 12)
+options(knitr.table.format = "latex")
+```
+
+```{r}
+library(janitor)
+library(tidyverse)
+library(data.table)
+library(rlist)
+library(utf8)
+library(VIM)
+```
+
+## ANALYSIS: Data was extracted from website https://www.airlinequality.com/airline-reviews/british-airways
+
+### Reading the data
+```{r}
+category_reviews <- read_csv("category_reviews.csv")
+overal_reviews <- read_csv("overal_reviews.csv")
+```
+
+### Remove the id column from category_reviews;
+```{r}
+category_reviews <- category_reviews %>% select(-id)
+```
+
+### table_id in category_reviews represent the id of each review-number of unique table_id;
+```{r}
+range(category_reviews$table_id)
+```
+
+### table_id is recycled from 1 to 3000 representing the first review to the 3000th review.
+
+### overal_reviews has 3350 reviews but category review has 3000 reviews
+
+1. **For the overal_rating**;
+
+1.1 **Review dates**
+```{r}
+overal_reviews_1 <- overal_reviews %>% 
+  mutate(review_dates = dmy(review_dates))
+range(overal_reviews_1$review_dates)
+```
+
+### The reviews were from 04/03/2015 to 18/05/2025.
+
+1.2 **Trip Verification**
+```{r}
+knitr::kable(overal_reviews_1 %>% count(trip_occurrence), caption = "TRAVELLERS", longtable = TRUE, digits = 2, format.args = list(big.mark = ",", scientific = FALSE), "latex") %>% kableExtra::column_spec(1, border_left = T) %>% kableExtra::column_spec(2, border_right = T) %>% kableExtra::kable_styling(latex_options = "HOLD_position", "repeat_header")
+```
+
+### It was verified that out of 3350 reviews 2098 were of verified individuals who actually flew the airline.
+
+1.3 **Verified 2098 travellers**
+```{r}
+overall_verified <- overal_reviews_1 %>% 
+  filter(trip_occurrence == "Verified")
+overall_verified$reviewer_name <- str_to_upper(overall_verified$reviewer_name) ### names to upper case
+overall_verified$reviewer_name <- str_squish(overall_verified$reviewer_name)   ### remove extra spaces
+```
+
+1.3.1 **Unique travellers**
+```{r}
+frequent_travellers <- overall_verified %>% 
+  count(reviewer_name) %>% arrange(desc(n)) %>% filter(n > 1)
+```
+
+### Number of individuals that had travelled more than once
+```{r}
+nrow(frequent_travellers)
+```
+
+### Top most travellers
+```{r}
+knitr::kable(frequent_travellers, caption = "REPEAT TRAVELLERS", longtable = TRUE, digits = 2, format.args = list(big.mark = ",", scientific = FALSE), "latex") %>% kableExtra::column_spec(1, border_left = T) %>% kableExtra::column_spec(2, border_right = T) %>% kableExtra::kable_styling(latex_options = "HOLD_position", "repeat_header")
+```
+
+### frequent travelers that used British Airways on 2
+```{r}
+frequent_return_only <- frequent_travellers %>% filter(n < 3)
+nrow(frequent_return_only)
+```
+
+### Range of rating
+```{r}
+range(overall_verified$overal_rating)
+```
+
+### the lowest rating was 1 while the highest rating was 10
+
+### the rating is an ordered factor from 1 to 10
+```{r}
+overall_verified$overal_rating <- factor(overall_verified$overal_rating,
+                                         levels = c(1,2,3,4,5,6,7,8,9,10),
+                                         ordered = T)
+```
+
+```{r}
+knitr::kable(overall_verified %>% count(overal_rating) %>% mutate(percent = n/sum(n)*100), caption = "NO OF TRAVELLERS PER RATING", longtable = TRUE, digits = 2, format.args = list(big.mark = ",", scientific = FALSE), "latex") %>% kableExtra::column_spec(1, border_left = T) %>% kableExtra::column_spec(3, border_right = T) %>% kableExtra::kable_styling(latex_options = "HOLD_position", "repeat_header")
+```
+
+### From the number of verified travellers, most gave the airline a very low overall rating of 1. Out of the 2098 travellers 1271 of them gave a rating of 4 and below.
+
+```{r}
+overall_verified %>% count(overal_rating) %>% 
+  ggplot(aes(x = overal_rating, y = n, fill = overal_rating)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(legend.position = "none") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 660, by = 30),
+    limits = c(0, 660)) +
+  labs(title = "NO OF TRAVELLERS PER RATING", x = "Rating")
+```
+
+### Country
+```{r}
+overall_verified$review_country <- str_to_upper(overall_verified$review_country) ### names to upper case
+overall_verified$review_country <- str_squish(overall_verified$review_country)   ### remove extra spaces
+```
+
+```{r}
+knitr::kable(overall_verified %>% count(review_country) %>% mutate(percent = n/sum(n)*100) %>% arrange(desc(n)), caption = "COUNTRY OF TRAVELLERS", longtable = TRUE, digits = 2, format.args = list(big.mark = ",", scientific = FALSE), "latex") %>% kableExtra::column_spec(1, border_left = T) %>% kableExtra::column_spec(3, border_right = T) %>% kableExtra::kable_styling(latex_options = "HOLD_position", "repeat_header")
+```
+
+### 60% of customers of BRITISH AIRLINES are from UNITED KINGDOM followed distantly with 12.7% from UNITED STATES.
+
+## Ratings: 1-4 as low, 5,6,7 average and 8,9,10 as high rating
+```{r}
+overall_verified$ratings <- with(
+  overall_verified,
+  ifelse(overal_rating <= 4, "low",
+    ifelse(overal_rating <= 7, "medium", "high")
+  )
+)
+overall_verified$ratings <- factor(overall_verified$ratings)
+```
+
+```{r}
+overall_verified %>% count(ratings) %>% 
+  ggplot(aes(x = ratings, y = n, fill = ratings)) + 
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 1320, by = 60),
+    limits = c(0, 1320)) +
+  theme(legend.position = "none") +
+  labs(title = "NO OF TRAVELERS ON RATINGS", x = "Rating")
+```
+
+### Low rating from 1 to 4
+```{r}
+low_rating <- overall_verified %>% filter(overal_rating < 5)
+```
+
+```{r}
+country_lowrating_count <- low_rating %>% 
+  group_by(overal_rating) %>% count(review_country)
+
+country_lowrating_count %>% filter(n > 9) %>% 
+  ggplot(aes(x = review_country, y = n, fill = overal_rating)) +            geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 357, by = 21),
+    limits = c(0, 357)) +
+  theme(axis.text.x = element_text(angle = 45)) +
+  labs(title = "COUNTRIES WITH HIGH LOW RATING", x = "Rating")
+```
+
+### Many low rating scores were received from travellers from AUSTRALIA, CANADA, GERMAN, SOUTH AFRICA, UNITED KINGDOM and UNITED  STATES.
+
+### UNITED KINGDOM had many travellers who had scored a 1.
+
+### Since the dataset has overal rating, it is unnecessary to perform sentiment analysis using review body and review title. It is also seen that the customers were rating individual category of service and provisions.
+
+### Thus, for the low rating we would connect with category reviews to get the different ratings that resulted in the overall low rating.
+
+### table_id in category_reviews is the id for the reviewer from the first reviewer to the 3000th reviewer, same as id column in low_rating data set.
+
+1.4 Filtering low rating travellers who are in the category_reviews;
+```{r}
+low_category <- category_reviews[category_reviews$table_id %in% low_rating$id, ]
+low_category$table_id <- factor(low_category$table_id)
+```
+
+```{r}
+head(low_category, 20)
+```
+
+```{r}
+n_distinct(low_category$table_id) ## no of distinct table_id
+```
+
+### We have 1271 distinct table_id implying that the data filtered was for the low rating customers.
+
+### Convert the data to a wide fortmat'
+```{r}
+low_category_2 <- low_category %>% 
+  pivot_wider(names_from = category, values_from = score)
+```
+
+```{r}
+dim(low_category_2)
+```
+
+
+```{r}
+head(low_category_2, 20)
+```
+
+### Clean column names
+```{r}
+low_category_2 <- low_category_2 %>% clean_names()
+```
+
+### Columns with missing values
+```{r}
+names(which(colSums(is.na(low_category_2)) > 0))
+```
+
+### Number of missing values in each column
+```{r}
+colSums(is.na(low_category_2))
+```
+
+
+### Columns without missing values
+```{r}
+names(which(colSums(is.na(low_category_2)) == 0))
+```
+
+### missing values
+```{r}
+a <- aggr(low_category_2, plot = FALSE)
+plot(a, numbers = TRUE)
+```
+
+### It is seen that wifi connectivity has a very high proportion of missing values almost 75% of the entries are missing. Almost 50% of values on aircraft are missing while inflight_entertainment had more than 40%.
+
+### Given the high proportions of missing values in wifi_connectivity, inflight_entertainment, food_beverages and aircraft it will be hard to get meaningful insights from the columns as conclussions will be hard to draw. Thus, the columns will be removed;
+```{r}
+low_category_3 <- low_category_2 %>% 
+  select(-wifi_connectivity, -inflight_entertainment, 
+         -aircraft, -food_beverages)
+```
+
+```{r}
+colMeans(is.na(low_category_3))
+```
+
+```{r}
+head(low_category_3, 20)
+```
+
+### Type of travellers;
+```{r}
+low_category_3 %>% count(type_of_traveller)
+```
+
+### Replace the NAs with Unknown for type of traveller;
+```{r}
+low_category_3$type_of_traveller[is.na(low_category_3$type_of_traveller)] <- "Unknown"
+```
+
+```{r}
+low_category_3 %>% count(type_of_traveller, sort = T) %>% 
+  mutate(percent = n/sum(n)*100)
+```
+
+### Most of the low rating customers were Couple Leisure, Solo Leisure and Business travellers. There numbers were also close.
+
+### Seat type;
+```{r}
+low_category_3 %>% count(seat_type, sort = T) %>% 
+  mutate(percent = n/sum(n)*100)
+```
+
+### By far most of the low rating travellers used Economy Class;
+```{r}
+low_category_3 %>% count(seat_type, sort = T) %>% 
+  ggplot(aes(reorder(x = seat_type, -n), y = n, fill = seat_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(legend.position = "none") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 770, by = 35),
+    limits = c(0, 770)) +
+  labs(title = "NO OF TRAVELLERS BY SEAT", x = "SEAT TYPE")
+```
+
+### It is seen that more than 87% of the customers that gave a low rating used Economy Class and Business Class.
+
+### Seat comfort is a rating that ranges from 1 to 5;
+```{r}
+range(low_category_3$seat_comfort)
+low_category_3 %>% count(seat_comfort, sort = T) %>% 
+  mutate(percent = n/sum(n)*100)
+```
+
+### It is seen that seat_comfort ranges from 1 to 5 but it has NAs and it is loaded as a character column, we convert column to factor.
+
+### Since seat_comfort should be a fcator from 1 to 5 we will replace NAs with Unknown
+
+```{r}
+low_category_4 <- low_category_3
+low_category_4$seat_comfort <- factor(low_category_4$seat_comfort, 
+                                      levels = c(1,2,3,4,5),
+                                      ordered = T)
+low_category_4 <- low_category_4 %>% 
+  mutate(seat_comfort = fct_na_value_to_level(seat_comfort, 
+                                              level = "Unknown"))
+```
+
+```{r}
+range(low_category_4$seat_comfort)
+low_category_4 %>%
+  count(seat_comfort, sort = T) %>%
+  mutate(percent = n / sum(n) * 100)
+```
+
+```{r}
+low_category_4 %>%
+  count(seat_comfort, sort = T) %>%
+  ggplot(aes(reorder(x = seat_comfort, -n), y = n, fill = seat_comfort)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(legend.position = "none") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 400, by = 20),
+    limits = c(0, 400)) +
+  labs(title = "NO OF TRAVELLERS BY SEAT COMFORT", x = "SEAT COMFORT")
+```
+
+### 21% of travellers that gave a low rating did not have a problem with their seat although at least 75% of them had a problem with their seat as they rated seat comfort with 2,1 and 3.
+
+```{r}
+seat_type_comfort <- low_category_4 %>% 
+  group_by(seat_type) %>% count(seat_comfort)
+seat_type_comfort_2 <- low_category_4 %>% 
+  group_by(seat_type) %>% count(seat_comfort) %>% 
+  mutate(percent = n / sum(n) * 100)
+```
+
+```{r}
+knitr::kable(seat_type_comfort_2, caption = "SEAT TYPE AND SEAT COMFORT", longtable = TRUE, digits = 2, format.args = list(big.mark = ",", scientific = FALSE), "latex") %>% kableExtra::column_spec(1, border_left = T) %>% kableExtra::column_spec(4, border_right = T) %>% kableExtra::kable_styling(latex_options = "HOLD_position", "repeat_header")
+```
+
+```{r}
+ggplot(seat_type_comfort, aes(x = seat_type, y = n, 
+                              fill = seat_comfort)) + 
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 220, by = 11),
+    limits = c(0, 220)) +
+  labs(title = "SEAT TYPE AND SEAT COMFORT", x = "SEAT TYPE")
+```
+
+### Business and Economy had high numbers of travellers who were comfortable with their seats while Premium Economy and First Class were unhappy with their seats. Overally, most of the travellers were not comfortable with their seats across the 4 seat types.
+
+### Cabin staff service;
+```{r}
+low_category_4 %>% count(cabin_staff_service, sort = T) %>% 
+  mutate(percent = n/sum(n)*100)
+```
+
+### Cabin staff service ranges from 0 to 5, but it has 95 NAs.
+### We convert the column to an ordered factor and replace NAs with unknown.
+```{r}
+low_category_4$cabin_staff_service <- factor(low_category_4$cabin_staff_service,
+  levels = c(0, 1, 2, 3, 4, 5),
+  ordered = T
+)
+low_category_4 <- low_category_4 %>%
+  mutate(cabin_staff_service = fct_na_value_to_level(cabin_staff_service,
+    level = "Unknown"
+  ))
+```
+
+```{r}
+low_category_4 %>%
+  count(cabin_staff_service, sort = T) %>%
+  mutate(percent = n / sum(n) * 100)
+```
+
+### At least 81% of travellers that gave an overall low rating had also rated cabin staff service lowly.
+
+```{r}
+low_category_4 %>%
+  count(cabin_staff_service, sort = T) %>%
+  ggplot(aes(reorder(x = cabin_staff_service, -n), 
+             y = n, fill = cabin_staff_service)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(legend.position = "none") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 460, by = 23),
+    limits = c(0, 460)) +
+  labs(title = "NO OF TRAVELLERS BY STAFF SERVICE", 
+       x = "STAFF SERVICE")
+```
+
+### Staff Service per Seat type
+```{r}
+seat_type_service <- low_category_4 %>% 
+  group_by(seat_type) %>% count(cabin_staff_service)
+seat_type_service_2 <- low_category_4 %>% 
+  group_by(seat_type) %>% count(cabin_staff_service) %>% 
+  mutate(percent = n / sum(n) * 100)
+```
+
+```{r}
+knitr::kable(seat_type_service_2, caption = "SEAT TYPE AND STAFF SERVICE", longtable = TRUE, digits = 2, format.args = list(big.mark = ",", scientific = FALSE), "latex") %>% kableExtra::column_spec(1, border_left = T) %>% kableExtra::column_spec(4, border_right = T) %>% kableExtra::kable_styling(latex_options = "HOLD_position", "repeat_header")
+```
+
+```{r}
+ggplot(seat_type_service, aes(x = seat_type, y = n, 
+                                fill = cabin_staff_service)) + 
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 260, by = 13),
+    limits = c(0, 260)) +
+  labs(title = "SEAT TYPE AND STAFF SERVICE", x = "SEAT TYPE")
+```
+
+### for the seat type and cabin staff service we make a rating higher than 3 to be high that is 4 and 5 and the rest to be low.
+```{r}
+seat_type_service_2$score <- ifelse(seat_type_service_2$cabin_staff_service > 3, "high", "low")
+```
+
+### We maintain the value of unknown to be unknown
+```{r}
+seat_type_service_2 <- seat_type_service_2 %>%
+    mutate(score = case_when(
+        str_detect(cabin_staff_service, "Unknown") ~ "Unknown",
+        TRUE ~ score
+    ))
+```
+
+### total percentage per class of seat type and cabin staff service
+```{r}
+seat_type_service_3 <- seat_type_service_2 %>% group_by(seat_type, score) %>% summarise(percent = sum(percent))
+```
+
+```{r}
+knitr::kable(seat_type_service_3, caption = "SEAT TYPE AND STAFF SERVICE TOTALS", longtable = TRUE, digits = 2, format.args = list(big.mark = ",", scientific = FALSE), "latex") %>% kableExtra::column_spec(1, border_left = T) %>% kableExtra::column_spec(3, border_right = T) %>% kableExtra::kable_styling(latex_options = "HOLD_position", "repeat_header")
+```
+
+### It seen that low rating for cabin staff service was maintained across the different seat types.
+
+### Ground Service;
+```{r}
+low_category_4 %>%
+  count(ground_service, sort = T) %>%
+  mutate(percent = n / sum(n) * 100)
+```
+
+### Ground Service is rated from 0 to 5 but has 46 NAs values.
+
+### We convert the column to factor and replace NAs with unknown;
+```{r}
+low_category_4$ground_service <- factor(low_category_4$ground_service,
+  levels = c(0, 1, 2, 3, 4, 5),
+  ordered = T
+)
+low_category_4 <- low_category_4 %>%
+  mutate(ground_service = fct_na_value_to_level(ground_service,
+    level = "Unknown"
+  ))
+```
+
+```{r}
+low_category_4 %>%
+  count(ground_service, sort = T) %>%
+  mutate(percent = n / sum(n) * 100)
+```
+
+### At least 95% of the travellers that gave an overall low rating were not happy with the ground service.
+
+```{r}
+low_category_4 %>%
+  count(ground_service, sort = T) %>%
+  ggplot(aes(reorder(x = ground_service, -n), 
+             y = n, fill = ground_service)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(legend.position = "none") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 460, by = 23),
+    limits = c(0, 460)) +
+  labs(title = "NO OF TRAVELLERS BY GROUND SERVICE", 
+       x = "GROUND SERVICE")
+```
+
+### Ground Service per Seat type
+```{r}
+seat_type_ground <- low_category_4 %>% 
+  group_by(seat_type) %>% count(ground_service)
+seat_type_ground_2 <- low_category_4 %>% 
+  group_by(seat_type) %>% count(ground_service) %>% 
+  mutate(percent = n / sum(n) * 100)
+```
+
+```{r}
+knitr::kable(seat_type_ground_2, caption = "SEAT TYPE AND GROUND SERVICE", longtable = TRUE, digits = 2, format.args = list(big.mark = ",", scientific = FALSE), "latex") %>% kableExtra::column_spec(1, border_left = T) %>% kableExtra::column_spec(4, border_right = T) %>% kableExtra::kable_styling(latex_options = "HOLD_position", "repeat_header")
+```
+
+```{r}
+ggplot(seat_type_ground_2, aes(x = seat_type, y = n, 
+                               fill = ground_service)) + 
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 280, by = 14),
+    limits = c(0, 280)) +
+  labs(title = "SEAT TYPE AND GROUND SERVICE", x = "SEAT TYPE")
+```
+
+### The rating was low across the different seat types.
+
+### for the seat type and ground service we make a rating higher than 3 to be high that is 4 and 5 and the rest to be low.
+```{r}
+seat_type_ground_2$score <- ifelse(seat_type_ground_2$ground_service > 3, "high", "low")
+```
+
+### We maintain the value of unknown to be unknown
+```{r}
+seat_type_ground_2 <- seat_type_ground_2 %>%
+    mutate(score = case_when(
+        str_detect(ground_service, "Unknown") ~ "Unknown",
+        TRUE ~ score
+    ))
+```
+
+### total percentage per class of seat type and ground service
+```{r}
+seat_type_ground_3 <- seat_type_ground_2 %>% group_by(seat_type, score) %>% summarise(percent = sum(percent))
+```
+
+```{r}
+knitr::kable(seat_type_ground_3, caption = "SEAT TYPE AND GROYUND SERVICE TOTALS", longtable = TRUE, digits = 2, format.args = list(big.mark = ",", scientific = FALSE), "latex") %>% kableExtra::column_spec(1, border_left = T) %>% kableExtra::column_spec(3, border_right = T) %>% kableExtra::kable_styling(latex_options = "HOLD_position", "repeat_header")
+```
+
+### Low rating of ground service is high across the different seat types for the overal low rating travellers.
+
+### Value for Money;
+```{r}
+low_category_4 %>%
+  count(value_for_money, sort = T) %>%
+  mutate(percent = n / sum(n) * 100)
+```
+
+### Value for money is given a rating from 0 to 4. We convert the column to factor with ordered levels from 0 to 4;
+```{r}
+low_category_4$value_for_money <- factor(low_category_4$value_for_money,
+  levels = c(0, 1, 2, 3, 4),
+  ordered = T
+)
+```
+
+```{r}
+low_category_4 %>%
+  count(value_for_money, sort = T) %>%
+  mutate(percent = n / sum(n) * 100)
+```
+
+### 84% of travellers with a low rating had a rating of 0, 1 or 2 on value for money which can be rated as low.
+
+```{r}
+low_category_4 %>%
+  count(value_for_money, sort = T) %>%
+  ggplot(aes(reorder(x = value_for_money, -n), 
+             y = n, fill = value_for_money)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(legend.position = "none") +
+  scale_y_continuous("NO OF TRAVELLERS",
+    breaks = seq(0, 460, by = 23),
+    limits = c(0, 460)) +
+  labs(title = "NO OF TRAVELLERS BY VALUE FOR MONEY", 
+       x = "VALUE FOR MONEY")
+```
+
+### Would the travellers recommend the airline;
+```{r}
+low_category_4 %>%
+  count(recommended, sort = T) %>%
+  mutate(percent = n / sum(n) * 100)
+```
+
+### At least 98% of travellers with overal low rating would not recommend the Airline 
+
+* The data was scrapped in two different datasets
+
+i. overal_reviews- data set that had 3350 observations with 8 variables. The data set had the name of reviewer, date of review, overal rating, trip occurrence-trip verification, review body-comment, review title, review country and id-which was the id given as scrapping was done from the first reviewer.
+
+ii. category_reviews- data set that had 33629 observations with three variables of category-had observations like type of traveler, seat type, route, date flown, seat comfort, cabin staff service, ground service, Value For Money, Aircraft, Food & Beverages, Inflight Entertainment, Wifi & Connectivity and Recommended, score-was the value taken category entries and table_id-which was the id of the first reviewer to the last reviewer, it was recycled from 1 to 3000 implying the first 3000 reviewers.
+
+### Reviews were from 04/03/2015 to 18/05/2025.
+
+* Out of the 3350 reviews in the overal reviews 2098 were verified travelers, that is 63% of the reviews scrapped were of verified travelers.
+
+* There were 173-8%, individuals who were verified to have traveled more than once with the most frequent travelers having traveled 34 times, followed by 28 times, then 13 times and 2 individuals having traveled 10 times. It is worth noting that 102 of the 173 travelers only used British Airways twice.
+
+* Overall rating ranged from 1 to 10. The column was converted to an ordered factor column with 1 as the lowest level and 10 as the highest level.
+
+* Out of the 2098 verified travelers 1271 which is 61% of the travelers, gave a rating of 4 and below. At least 29% of them gave a rating of 1, the lowest rating.
+
+* 60% of customers of BRITISH AIRLINES are from UNITED KINGDOM followed distantly with 12.7% from UNITED STATES.
+
+* Analysis was further done on travelers that gave a low rating of 1 to 4.
+
+* Many low rating scores were received from travelers from AUSTRALIA, CANADA, GERMANY, SOUTH AFRICA, UNITED KINGDOM and UNITED STATES.
+
+* UNITED KINGDOM had many travelers who had scored a 1.
+
+* A data set of low rating was created and it was joined with the category reviews by table_id and id. We got 1271 distinct table_id.
+
+* Obtained data was converted to wide format where columns entries were converted to column heads.
+
+* A data set of 1271 observations with 14 variables was obtained.
+
+* The data set had 9 columns with missing values where aircraft, food_beverages, inflight_entertainment and wifi_connectivity had had high number of missing values. The columns were removed.
+
+* NAs in type_of_traveller were replaced by unknown.
+
+* Most of the low rating customers were Couple Leisure, Solo Leisure and Business travelers.There numbers were also close.
+
+* By far most of the low rating travelers that is 60%, used Economy Class.
+
+* At least 87% of the customers that gave a low rating used Economy Class and Business Class.
+
+* seat comfort column was converted to factor with an ordered levels from 1 to 5 with NAs replaced with Unknown.
+
+* 21% of travelers that gave a low rating did not have a problem with their seat although at least 75% of them had a problem with their seat as they rated seat comfort at 2, 1 and 3.
+
+* Business and Economy had high numbers of travelers who were comfortable with their seats while Premium Economy and First Class were unhappy with their seats although, most of the travelers were not comfortable with their seats across the 4 seat types.
+
+* Cabin staff service column was converted to factor with an ordered levels from 0 to 5 with NAs replaced with Unknown.
+
+* At least 81% of travelers that gave an overall low rating had also rated cabin staff service lowly. low rating for cabin staff service was maintained across the different seat types.
+
+* At least 95% of the travelers that gave an overall low rating were not happy with the ground service. Low rating of ground service is high across the different seat types for the overall low rating travelers.
+
+* 84% of travelers with a low rating had a rating of 0, 1 or 2 on value for money which can be rated as low.
+
+* At least 98% of travelers with overall low rating would not recommend the Airline.
